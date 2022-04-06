@@ -1,0 +1,22 @@
+name: build
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v2
+
+      - name: Compile
+        run: gcc -lm -Wall Main.c -o controller-emu
+
+      - name: Archive artifact
+        uses: actions/upload-artifact@v2
+        with:
+          path: controller-emu
