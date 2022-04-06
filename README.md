@@ -37,7 +37,7 @@ RIGHT THUMBSTICK CLICK=H
 
 # Compilation 
 I use gcc but other compilers probably work  
-`gcc -lm -Wall Main.c -o controller-emu`
+`gcc -Wall Main.c -lm -o controller-emu`
 
 # TO-DO:  
 Add config file to make this usable with non QWERTY layouts and keyboards without numpads
