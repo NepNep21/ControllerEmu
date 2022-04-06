@@ -14,7 +14,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Compile
-        run: gcc -lm -Wall Main.c -o controller-emu
+        run: gcc -Wall Main.c -lm -o controller-emu
 
       - name: Archive artifact
         uses: actions/upload-artifact@v2
