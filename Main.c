@@ -19,10 +19,10 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
 #include <linux/input.h>
 #include <linux/uinput.h>
 #include <math.h>
-#include <memory.h>
 #include <unistd.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
 
 #define ERR_ARG -1
