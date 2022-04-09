@@ -44,6 +44,7 @@ static double getTimeWithMillis() {
 
 static void printErr(const char *err) {
     fputs(err, stderr);
+    fputc('\n', stderr);
 }
 
 static bool setupAbs(int fd, unsigned short channel, int min, int max) {
