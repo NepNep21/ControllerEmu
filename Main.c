@@ -25,16 +25,50 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
 #include <string.h>
 #include <time.h>
 
+#ifndef NO_CONFIG
+#include <ini.h>
+#include <limits.h>
+#include <stdlib.h>
+#endif
+
 #define ERR_ARG -1
 #define ERR_SETUP 1
 #define ERR_INPUT 2
 #define ERR_UINPUT 3
+#define ERR_NO_HOME 4
+#define ERR_INTERNAL 5
 
 #define DELTA_STICK 64
 #define DELTA_TRIGGERS 16
 
 #define ABS_LIMIT_TRIGGERS 128
 #define ABS_LIMIT_STICK 512
+
+#define CONFIG_AMOUNT 22
+
+#define CONFIG_A "A"
+#define CONFIG_B "B"
+#define CONFIG_X "X"                    
+#define CONFIG_Y "Y"                    
+#define CONFIG_DPAD_LEFT "DPAD_LEFT"
+#define CONFIG_DPAD_UP "DPAD_UP"
+#define CONFIG_DPAD_DOWN "DPAD_DOWN"
+#define CONFIG_DPAD_RIGHT "DPAD_RIGHT"
+#define CONFIG_LEFT_THUMB_LEFT "LEFT_THUMB_LEFT"
+#define CONFIG_LEFT_THUMB_UP "LEFT_THUMB_UP"
+#define CONFIG_LEFT_THUMB_DOWN "LEFT_THUMB_DOWN"
+#define CONFIG_LEFT_THUMB_RIGHT "LEFT_THUMB_RIGHT"
+#define CONFIG_LEFT_THUMB_CLICK "LEFT_THUMB_CLICK"
+#define CONFIG_LEFT_TRIGGER "LEFT_TRIGGER"
+#define CONFIG_RIGHT_TRIGGER "RIGHT_TRIGGER"
+#define CONFIG_RIGHT_THUMB_LEFT "RIGHT_THUMB_LEFT"
+#define CONFIG_RIGHT_THUMB_UP "RIGHT_THUMB_UP"
+#define CONFIG_RIGHT_THUMB_DOWN "RIGHT_THUMB_DOWN"
+#define CONFIG_RIGHT_THUMB_RIGHT "RIGHT_THUMB_RIGHT"
+#define CONFIG_RIGHT_THUMB_CLICK "RIGHT_THUMB_CLICK"
+#define CONFIG_LEFT_BUMPER "LEFT_BUMPER"
+#define CONFIG_RIGHT_BUMPER "RIGHT_BUMPER"
+
 
 static double getTimeWithMillis() {
     struct timespec time;
@@ -43,8 +77,7 @@ static double getTimeWithMillis() {
 }
 
 static void printErr(const char *err) {
-    fputs(err, stderr);
-    fputc('\n', stderr);
+    fprintf(stderr, "%s\n", err);
 }
 
 static bool setupAbs(int fd, unsigned short channel, int min, int max) {
@@ -87,17 +120,156 @@ static void processThumbStick(int *x, int *y, bool isXPosPressed, bool isXNegPre
     }
 }
 
+typedef struct Config {
+    char **keys;
+    unsigned short *values;
+} Config;
+
+#ifndef NO_CONFIG
+static int iniIndex = 0;
+
+static unsigned long min(unsigned long x, unsigned long y) {
+    if (x < y) {
+        return x;
+    }
+    return y;
+}
+
+static int iniGen(void *user, const char *section, const char *name, const char *value) {
+    if (!strcmp(section, "keys")) {
+        Config *config = (Config*) user;
+        char *key = strdup(name);
+        config->keys[iniIndex] = key;
+        config->values[iniIndex] = min(strtoul(value, NULL, 10), USHRT_MAX);
+        iniIndex++;
+    }
+    return 1;
+}
+
+// This isn't necessary strictly speaking but oh well
+static void cleanupConfig(Config* config) {
+    for (int i = 0; i < CONFIG_AMOUNT; i++) {
+        free(config->keys[i]);
+    }
+    free(config->keys);
+    free(config->values);
+}
+#endif
+
+static unsigned short getValue(Config *config, const char *key) {
+    for (int i = 0; i < CONFIG_AMOUNT; i++) {
+        if (!strcmp(config->keys[i], key)) {
+            return config->values[i];
+        }
+    }
+    return 0;
+}
+
+static void defaultConfig(Config *config) {
+    static char* keys[] = {
+        CONFIG_A,
+        CONFIG_B,
+        CONFIG_X,                    
+        CONFIG_Y,                  
+        CONFIG_DPAD_LEFT,
+        CONFIG_DPAD_UP,
+        CONFIG_DPAD_DOWN,
+        CONFIG_DPAD_RIGHT,
+        CONFIG_LEFT_THUMB_LEFT,
+        CONFIG_LEFT_THUMB_UP,
+        CONFIG_LEFT_THUMB_DOWN,
+        CONFIG_LEFT_THUMB_RIGHT,
+        CONFIG_LEFT_THUMB_CLICK,
+        CONFIG_LEFT_TRIGGER,
+        CONFIG_RIGHT_TRIGGER,
+        CONFIG_RIGHT_THUMB_LEFT,
+        CONFIG_RIGHT_THUMB_UP,
+        CONFIG_RIGHT_THUMB_DOWN,
+        CONFIG_RIGHT_THUMB_RIGHT,
+        CONFIG_RIGHT_THUMB_CLICK,
+        CONFIG_LEFT_BUMPER,
+        CONFIG_RIGHT_BUMPER
+    };
+    static unsigned short values[] = {
+        KEY_A,
+        KEY_B,
+        KEY_X,
+        KEY_Y,
+        KEY_DELETE,
+        KEY_HOME,
+        KEY_END,
+        KEY_PAGEDOWN,
+        KEY_I,
+        KEY_J,
+        KEY_K,
+        KEY_L,
+        KEY_Q,
+        KEY_E,
+        KEY_KP4,
+        KEY_KP8,
+        KEY_KP5,
+        KEY_KP6,
+        KEY_G,
+        KEY_H,
+        KEY_T,
+        KEY_U
+    };
+    
+    config->keys = keys;
+    config->values = values;
+}
+
 int main(int argc, char **argv) {
-    if (argc != 2) {
+    if (argc == 1) {
         printErr("Invalid arguments");
         return ERR_ARG;
     }
+
+    Config config;
+    #ifndef NO_CONFIG
+    char *configPath = getenv("CONTROLLEREMU_CONFIG");
+
+    if (configPath == NULL && argc == 3 && !strcmp(argv[2], "--find-config")) {
+        char *configDir = getenv("XDG_CONFIG_HOME");
+        if (configDir != NULL) {
+            configPath = strcat(configDir, "/controller-emu.cfg");
+        }
+        if (configPath == NULL) {
+            char *home = getenv("HOME");
+            if (home != NULL) {
+                configPath = strcat(home, "/.config/controller-emu.cfg");
+            }
+        }
+        if (configPath == NULL) {
+            printErr("Your $HOME is not set, go figure that out");
+            return ERR_NO_HOME;
+        }
+    }
+
+    const bool mallocConfig = configPath != NULL;
+    #define maybeCleanup() if (mallocConfig) cleanupConfig(&config)
+    if (mallocConfig) {
+        config.keys = malloc(sizeof(char*) * CONFIG_AMOUNT);
+        config.values = malloc(sizeof(unsigned short*) * CONFIG_AMOUNT);
+        if (ini_parse(configPath, iniGen, &config)) {
+            cleanupConfig(&config);
+            return ERR_INTERNAL;
+        }
+    } else {
+        defaultConfig(&config);
+    }
+    #else
+    defaultConfig(&config);
+    #endif
 
     char *dev = argv[1];
 
     int uinput = open("/dev/uinput", O_WRONLY);
 
     if (uinput < 0) {
+        #ifndef NO_CONFIG
+        maybeCleanup();
+        #endif
         printErr("Failed to open uinput");
         return ERR_SETUP;
     }
@@ -146,6 +318,9 @@ int main(int argc, char **argv) {
 
     if (failed) {
         close(uinput);
+        #ifndef NO_CONFIG
+        maybeCleanup();
+        #endif
         printErr("Failed to initialize");
         return ERR_SETUP;
     }
@@ -154,6 +329,9 @@ int main(int argc, char **argv) {
 
     if (devFD < 0) {
         printErr("Failed to open input device");
+        #ifndef NO_CONFIG
+        maybeCleanup();
+        #endif
         ioctl(uinput, UI_DEV_DESTROY);
         close(uinput);
         return ERR_INPUT;
@@ -198,10 +376,14 @@ int main(int argc, char **argv) {
 
     int leftTrigger = 0;
     int rightTrigger = 0;
+
     while (true) {
         struct input_event event;
         if (read(devFD, &event, sizeof(event)) < 0) {
             printErr("Failed to read event from input");
+            #ifndef NO_CONFIG
+            maybeCleanup();
+            #endif
             ioctl(uinput, UI_DEV_DESTROY);
             close(uinput);
             close(devFD);
@@ -209,73 +391,53 @@ int main(int argc, char **argv) {
         }
         int isPressed = event.value;
         unsigned short key = event.code;
-        switch (key) {
-            case KEY_A:
-                isAPressed = isPressed;
-                break;
-            case KEY_B:
-                isBPressed = isPressed;
-                break;
-            case KEY_X:
-                isXPressed = isPressed;
-                break;
-            case KEY_Y:
-                isYPressed = isPressed;
-                break;
-            case KEY_DELETE:
-                isLeftPressed = isPressed;
-                break;
-            case KEY_HOME:
-                isUpPressed = isPressed;
-                break;
-            case KEY_END:
-                isDownPressed = isPressed;
-                break;
-            case KEY_PAGEDOWN:
-                isRightPressed = isPressed;
-                break;
-            case KEY_I:
-                isIPressed = isPressed;
-                break;
-            case KEY_J:
-                isJPressed = isPressed;
-                break;
-            case KEY_K:
-                isKPressed = isPressed;
-                break;
-            case KEY_L:
-                isLPressed = isPressed;
-                break;
-            case KEY_Q:
-                isQPressed = isPressed;
-                break;
-            case KEY_E:
-                isEPressed = isPressed;
-                break;
-            case KEY_G:
-                isGPressed = isPressed;
-                break;
-            case KEY_H:
-                isHPressed = isPressed;
-                break;
-            case KEY_T:
-                isTPressed = isPressed;
-                break;
-            case KEY_U:
-                isUPressed = isPressed;
-                break;
-            case KEY_KP8:
-                isNP8Pressed = isPressed;
-                break;
-            case KEY_KP4:
-                isNP4Pressed = isPressed;
-                break;
-            case KEY_KP5:
-                isNP5Pressed = isPressed;
-                break;
-            case KEY_KP6:
-                isNP6Pressed = isPressed;
-        }
+
+        if (key == getValue(&config, CONFIG_A)) {
+            isAPressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_B)) {
+            isBPressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_X)) {
+            isXPressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_Y)) {
+            isYPressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_DPAD_LEFT)) {
+            isLeftPressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_DPAD_UP)) {
+            isUpPressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_DPAD_DOWN)) {
+            isDownPressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_DPAD_RIGHT)) {
+            isRightPressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_LEFT_THUMB_UP)) {
+            isIPressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_LEFT_THUMB_LEFT)) {
+            isJPressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_LEFT_THUMB_DOWN)) {
+            isKPressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_LEFT_THUMB_RIGHT)) {
+            isLPressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_LEFT_TRIGGER)) {
+            isQPressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_RIGHT_TRIGGER)) {
+            isEPressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_LEFT_THUMB_CLICK)) {
+            isGPressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_RIGHT_THUMB_CLICK)) {
+            isHPressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_LEFT_BUMPER)) {
+            isTPressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_RIGHT_BUMPER)) {
+            isUPressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_RIGHT_THUMB_UP)) {
+            isNP8Pressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_RIGHT_THUMB_LEFT)) {
+            isNP4Pressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_RIGHT_THUMB_DOWN)) {
+            isNP5Pressed = isPressed;
+        } else if (key == getValue(&config, CONFIG_RIGHT_THUMB_RIGHT)) {
+            isNP6Pressed = isPressed;
+        }      
+
         double newTime = getTimeWithMillis();
         if (newTime - lastTime >= 0.125) {
             lastTime = newTime;
@@ -400,6 +562,9 @@ int main(int argc, char **argv) {
         outEvents[18].value = 0;
 
         if (write(uinput, &outEvents, sizeof(outEvents)) <= 0) {
+            #ifndef NO_CONFIG
+            maybeCleanup();
+            #endif
             printErr("Failed to write to uinput");
             ioctl(uinput, UI_DEV_DESTROY);
             close(uinput);

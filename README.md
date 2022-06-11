@@ -37,7 +37,9 @@ RIGHT THUMBSTICK CLICK=H
 
 # Compilation 
 I use gcc but other compilers probably work  
-`gcc -Wall Main.c -lm -o controller-emu`
+`gcc -Wall Main.c -lm -linih -o controller-emu`  
+To compile without config support, removing the libinih requirement, use:  
+`gcc -Wall Main.c -lm -DNO_CONFIG -o controller-emu`
 
-# TO-DO:  
-Add config file to make this usable with non QWERTY layouts and keyboards without numpads
+# Configuration  
+To use a config file, either set the CONTROLLEREMU_CONFIG environment variable to the path to it, or pass the --find-config argument and place the config inside $XDG_CONFIG_HOME/controller-emu.cfg or $HOME/.config/controller-emu.cfg where they are searched in that order
