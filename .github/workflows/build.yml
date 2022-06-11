@@ -13,6 +13,9 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v2
 
+      - name: Install libraries
+        run: sudo apt-get install -y libinih-dev
+
       - name: Compile
         run: gcc -Wall Main.c -lm -linih -o controller-emu
 
