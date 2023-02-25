@@ -31,12 +31,12 @@ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEAL
 #include <stdlib.h>
 #endif
 
-#define ERR_ARG -1
 #define ERR_SETUP 1
 #define ERR_INPUT 2
 #define ERR_UINPUT 3
 #define ERR_NO_HOME 4
 #define ERR_INTERNAL 5
+#define ERR_ARG 6
 
 #define DELTA_STICK 64
 #define DELTA_TRIGGERS 16
